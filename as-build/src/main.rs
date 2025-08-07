@@ -8,22 +8,35 @@ use std::{
 };
 
 fn main() {
-    build_as_boot();
-    create_disk();
+    let args: Vec<_> = env::args().collect();
+    let release_flag = 2 <= args.len() && args[1] == "release";
+    println!("{}", release_flag);
+    
+    build_as_boot(release_flag);
+    create_disk(release_flag);
     run_qemu();
 }
 
-fn build_as_boot() {
+fn build_as_boot(release_flag: bool) {
     println!("building as-boot ...");
     env::set_current_dir("as-boot").unwrap();
-    Command::new("cargo").arg("build").status().unwrap();
+    let mut command = Command::new("cargo");
+    command.arg("build");
+    if release_flag {
+        command.arg("--release");
+    }
+    command.status().unwrap();
     env::set_current_dir("../").unwrap();
 }
 
-fn create_disk() {
+fn create_disk(release_flag: bool) {
     println!("creating disk image ...");
 
-    let as_boot_path = Path::new("target/x86_64-unknown-uefi/debug/as-boot.efi");
+    let as_boot_path = if release_flag {
+        Path::new("target/x86_64-unknown-uefi/release/as-boot.efi")
+    }else {
+        Path::new("target/x86_64-unknown-uefi/debug/as-boot.efi")
+    };
     let mut as_boot = File::open(as_boot_path).unwrap();
     let mut as_boot_vec = Vec::new();
     as_boot.read_to_end(&mut as_boot_vec).unwrap();
