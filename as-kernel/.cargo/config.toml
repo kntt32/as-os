@@ -1,0 +1,12 @@
+[build]
+target = "x86_64-unknown-none"
+
+[target.x86_64-unknown-none]
+rustflags = [
+  "-Cforce-unwind-tables=yes",
+  "-Cforce-frame-pointers=yes",
+  "-Cno-redzone",
+  "-Clink-arg=-static",
+  "-Crelocation-model=static",
+  "-Clink-arg=-T./as-kernel/linker.ld",
+]

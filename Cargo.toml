@@ -3,3 +3,8 @@ members = ["as-build", "as-boot", "as-kernel"]
 default-members = ["as-build"]
 resolver = "3"
 
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
