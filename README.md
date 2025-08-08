@@ -1,2 +1,2 @@
 # as-os
-as-macro + Rust = as-os
+(asmacro + Rust)*fijua-os = as-os
