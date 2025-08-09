@@ -10,7 +10,7 @@ use std::{
 fn main() {
     let args: Vec<_> = env::args().collect();
     let release_flag = 2 <= args.len() && args[1] == "release";
-    
+
     build_as_boot(release_flag);
     build_as_kernel(release_flag);
     create_disk(release_flag);
@@ -25,7 +25,9 @@ fn build_as_boot(release_flag: bool) {
     if release_flag {
         command.arg("--release");
     }
-    command.status().unwrap();
+    if !command.status().unwrap().success() {
+        panic!("failed to build as-boot");
+    }
     env::set_current_dir("../").unwrap();
 }
 
@@ -37,7 +39,9 @@ fn build_as_kernel(release_flag: bool) {
     if release_flag {
         command.arg("--release");
     }
-    command.status().unwrap();
+    if !command.status().unwrap().success() {
+        panic!("failed to build as-boot");
+    }
     env::set_current_dir("../").unwrap();
 }
 
@@ -46,7 +50,7 @@ fn create_disk(release_flag: bool) {
 
     let as_boot_path = if release_flag {
         Path::new("target/x86_64-unknown-uefi/release/as-boot.efi")
-    }else {
+    } else {
         Path::new("target/x86_64-unknown-uefi/debug/as-boot.efi")
     };
     let mut as_boot = File::open(as_boot_path).unwrap();
@@ -55,7 +59,7 @@ fn create_disk(release_flag: bool) {
 
     let as_kernel_path = if release_flag {
         Path::new("target/x86_64-unknown-none/release/as-kernel")
-    }else {
+    } else {
         Path::new("target/x86_64-unknown-none/debug/as-kernel")
     };
     let mut as_kernel = File::open(as_kernel_path).unwrap();
@@ -102,6 +106,7 @@ fn run_qemu() {
             "format=raw,file=target/disk.img",
             "-m",
             "512M",
+            "--enable-kvm",
         ])
         .status()
         .unwrap();
