@@ -92,7 +92,7 @@ unsafe fn get_root_file_protocol(
 unsafe fn read_kernel_file(
     system_table: *const EfiSystemTable,
     std_err: *const EfiSimpleTextOutputProtocol,
-) -> *mut u8 {
+) -> *const u8 {
     // free_pages in caller
     unsafe {
         let efi_file_protocol_root = get_root_file_protocol(system_table, std_err);
@@ -198,7 +198,7 @@ unsafe fn load_as_kernel(system_table: *const EfiSystemTable) {
             .expect("expected non-null pointer")
             .con_out;
 
-        let _kernel_temp_buffer: *mut u8 = read_kernel_file(system_table, std_err);
+        let _kernel_temp_buffer: *const u8 = read_kernel_file(system_table, std_err);
     }
 }
 
