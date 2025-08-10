@@ -5,7 +5,9 @@
 mod efi;
 mod utf16;
 
+use core::ops::Drop;
 use core::{ffi::c_void, mem, panic::PanicInfo, ptr};
+use core::slice;
 use efi::{
     EFI_STATUS_SUCCESS, EfiAllocateType, EfiFileInfo, EfiFileProtocol, EfiHandle, EfiMemoryType,
     EfiPhysicalAddress, EfiSimpleFileSystemProtocol, EfiSimpleTextOutputProtocol, EfiStatus,
@@ -27,7 +29,12 @@ pub unsafe extern "efiapi" fn efi_main(
         EfiSimpleTextOutputProtocol::output_string(con_out, "Hello, World!\n\r");
 
         EfiSimpleTextOutputProtocol::output_string(con_out, "LOG: loading as-kernel ...\n\r");
-        load_as_kernel(system_table);
+        if let Err(msg) = load_as_kernel(system_table) {
+            EfiSimpleTextOutputProtocol::output_string(con_out, "ERROR: ");
+            EfiSimpleTextOutputProtocol::output_string(con_out, msg);
+            EfiSimpleTextOutputProtocol::output_string(con_out, "\n\r");
+            panic!();
+        }
 
         EfiSimpleTextOutputProtocol::output_string(con_out, ".....\n\r");
     }
@@ -37,8 +44,7 @@ pub unsafe extern "efiapi" fn efi_main(
 
 unsafe fn get_efi_simple_file_system_protocol(
     system_table: *const EfiSystemTable,
-    std_err: *const EfiSimpleTextOutputProtocol,
-) -> *const EfiSimpleFileSystemProtocol {
+) -> Result<*const EfiSimpleFileSystemProtocol, &'static str> {
     unsafe {
         let boot_services = (*system_table).boot_services;
         let locate_protocol = (*boot_services).locate_protocol;
@@ -51,24 +57,18 @@ unsafe fn get_efi_simple_file_system_protocol(
             &mut simple_file_system_protocol as *mut *const _ as *mut *const c_void,
         ) != EFI_STATUS_SUCCESS
         {
-            EfiSimpleTextOutputProtocol::output_string(
-                std_err,
-                "ERROR: simple file system protocol was not found in device handle\n\r",
-            );
-            panic!("ERROR: simple file system protocol was not found in device handle\n\r");
+            return Err("simple file system protocol was not found in device handle");
         }
 
-        simple_file_system_protocol
+        Ok(simple_file_system_protocol)
     }
 }
 
 unsafe fn get_root_file_protocol(
     system_table: *const EfiSystemTable,
-    std_err: *const EfiSimpleTextOutputProtocol,
-) -> *const EfiFileProtocol {
+) -> Result<*const EfiFileProtocol, &'static str> {
     unsafe {
-        let simple_file_system_protocol =
-            get_efi_simple_file_system_protocol(system_table, std_err);
+        let simple_file_system_protocol = get_efi_simple_file_system_protocol(system_table)?;
         let open_volume = (*simple_file_system_protocol).open_volume;
 
         let mut efi_file_protocol_root: *const EfiFileProtocol = ptr::null();
@@ -77,26 +77,17 @@ unsafe fn get_root_file_protocol(
             &mut efi_file_protocol_root as *mut _,
         ) != EFI_STATUS_SUCCESS
         {
-            EfiSimpleTextOutputProtocol::output_string(
-                std_err,
-                "ERROR: failed to get file system protocol from EfiSimpleFileSystemProtocol\n\r",
-            );
-            panic!(
-                "ERROR: failed to get file system protocol from EfiSimpleFileSystemProtocol\n\r"
-            );
+            return Err("failed to get file system protocol from EfiSimpleFileSystemProtocol");
         }
 
-        efi_file_protocol_root
+        Ok(efi_file_protocol_root)
     }
 }
 
-unsafe fn read_kernel_file(
-    system_table: *const EfiSystemTable,
-    std_err: *const EfiSimpleTextOutputProtocol,
-) -> *const u8 {
+unsafe fn read_kernel_file(system_table: *const EfiSystemTable) -> Result<FileBuff, &'static str> {
     // free_pages in caller
     unsafe {
-        let efi_file_protocol_root = get_root_file_protocol(system_table, std_err);
+        let efi_file_protocol_root = get_root_file_protocol(system_table)?;
 
         let open = (*efi_file_protocol_root).open;
 
@@ -110,14 +101,10 @@ unsafe fn read_kernel_file(
             0,
         ) != EFI_STATUS_SUCCESS
         {
-            EfiSimpleTextOutputProtocol::output_string(
-                std_err,
-                "ERROR: failed to get file system protocol from root directory\n\r",
-            );
-            panic!("ERROR: failed to get file system protocol from root directory\n\r");
+            return Err("failed to get file system protocol from root directory");
         }
 
-        let buffer: *const u8 = read_to_memory(system_table, std_err, efi_file_protocol_kernel);
+        let file_buff = FileBuff::new(system_table, efi_file_protocol_kernel);
 
         let close = (*efi_file_protocol_kernel).close;
         (close)(efi_file_protocol_kernel);
@@ -125,81 +112,109 @@ unsafe fn read_kernel_file(
         let close = (*efi_file_protocol_root).close;
         (close)(efi_file_protocol_root);
 
-        buffer
+        file_buff
     }
 }
 
-unsafe fn read_to_memory(
-    system_table: *const EfiSystemTable,
-    std_err: *const EfiSimpleTextOutputProtocol,
-    file_handle: *const EfiFileProtocol,
-) -> *const u8 {
-    // free_pages in caller
-    let file_info_guid = EfiFileInfo::GUID;
-    let mut file_info_buff = [0u8; 1024];
-    let mut file_info_size: UIntN = file_info_buff.len();
+#[derive(Clone, Debug)]
+pub struct FileBuff {
+    pub system_table: *const EfiSystemTable,
+    pub buff: *const u8,
+    pub size: usize,
+}
 
-    unsafe {
-        if ((*file_handle).get_info)(
-            file_handle,
-            &file_info_guid,
-            &mut file_info_size as *mut _,
-            &mut file_info_buff as *mut u8,
-        ) != EFI_STATUS_SUCCESS
-        {
-            EfiSimpleTextOutputProtocol::output_string(
-                std_err,
-                "ERROR: failed to get EfiFileInfo\n\r",
-            );
-            panic!("ERROR: failed to get EfiFileInfo\n\r");
+impl FileBuff {
+    pub unsafe fn new(
+        system_table: *const EfiSystemTable,
+        file_handle: *const EfiFileProtocol,
+    ) -> Result<FileBuff, &'static str> {
+        unsafe {
+            let file_info = Self::get_file_info(file_handle)?;
+            let file_size = file_info.physical_size;
+
+            let boot_services = (*system_table).boot_services;
+            let allocate_pages = (*boot_services).allocate_pages;
+            let allocate_page_len: UIntN = (file_size as UIntN + 4095) / 4096;
+            let mut allocated_page_address: EfiPhysicalAddress = 0;
+            if (allocate_pages)(
+                EfiAllocateType::AllocateAnyPages,
+                EfiMemoryType::EfiLoaderData,
+                allocate_page_len,
+                &mut allocated_page_address as *mut _,
+            ) != EFI_STATUS_SUCCESS
+            {
+                return Err("failed to allocate tempolary buffer");
+            }
+
+            let buffer: *mut u8 = mem::transmute(allocated_page_address);
+            let mut buffer_size: UIntN = allocate_page_len * 4096;
+
+            let read = (*file_handle).read;
+            if (read)(file_handle, &mut buffer_size as *mut UIntN, buffer) != EFI_STATUS_SUCCESS {
+                return Err("failed to read file to buffer");
+            }
+
+            Ok(FileBuff {
+                system_table: system_table,
+                buff: buffer,
+                size: file_size as usize,
+            })
         }
+    }
 
-        let file_info_ptr =
-            mem::transmute::<*const u8, *const EfiFileInfo>(&file_info_buff as *const u8);
-        let file_size = (*file_info_ptr).physical_size;
+    unsafe fn get_file_info(
+        file_handle: *const EfiFileProtocol,
+    ) -> Result<EfiFileInfo, &'static str> {
+        unsafe {
+            let file_info_guid = EfiFileInfo::GUID;
+            let mut file_info_buff = [0u8; 1024];
+            let mut file_info_size: UIntN = file_info_buff.len();
 
-        let boot_services = (*system_table).boot_services;
-        let allocate_pages = (*boot_services).allocate_pages;
-        let allocate_page_len: UIntN = (file_size as UIntN + 4095) / 4096;
-        let mut allocated_page_address: EfiPhysicalAddress = 0;
-        if (allocate_pages)(
-            EfiAllocateType::AllocateAnyPages,
-            EfiMemoryType::EfiLoaderData,
-            allocate_page_len,
-            &mut allocated_page_address as *mut _,
-        ) != EFI_STATUS_SUCCESS
-        {
-            EfiSimpleTextOutputProtocol::output_string(
-                std_err,
-                "ERROR: failed to allocate tempolary buffer\n\r",
+            if ((*file_handle).get_info)(
+                file_handle,
+                &file_info_guid,
+                &mut file_info_size as *mut _,
+                &mut file_info_buff as *mut u8,
+            ) != EFI_STATUS_SUCCESS
+            {
+                return Err("failed to get EfiFileInfo");
+            }
+
+            let mut file_info: EfiFileInfo = mem::zeroed();
+            (&file_info_buff as *const u8).copy_to(
+                &mut file_info as *mut _ as *mut u8,
+                size_of::<EfiFileInfo>(),
             );
-            panic!("ERROR: failed to allocate tempolary buffer\n\r");
+
+            Ok(file_info)
         }
-
-        let buffer: *mut u8 = mem::transmute(allocated_page_address);
-        let mut buffer_size: UIntN = allocate_page_len * 4096;
-
-        let read = (*file_handle).read;
-        if (read)(file_handle, &mut buffer_size as *mut UIntN, buffer) != EFI_STATUS_SUCCESS {
-            EfiSimpleTextOutputProtocol::output_string(
-                std_err,
-                "ERROR: failed to read file to buffer\n\r",
-            );
-            panic!("ERROR: failed to read file to buffer\n\r");
-        }
-
-        buffer
     }
 }
 
-unsafe fn load_as_kernel(system_table: *const EfiSystemTable) {
-    unsafe {
-        let std_err = system_table
-            .as_ref()
-            .expect("expected non-null pointer")
-            .con_out;
+impl Drop for FileBuff {
+    fn drop(&mut self) {
+        unsafe {
+            let boot_services = (*self.system_table).boot_services;
+            let free_pages = (*boot_services).free_pages;
 
-        let _kernel_temp_buffer: *const u8 = read_kernel_file(system_table, std_err);
+            (free_pages)(self.buff as EfiPhysicalAddress, (self.size + 4095) / 4096);
+        }
+    }
+}
+
+unsafe fn load_as_kernel(system_table: *const EfiSystemTable) -> Result<*const u8, &'static str> {
+    unsafe {
+        let kernel_file_buffer = read_kernel_file(system_table)?;
+        let kernel_file_buff_u8_slice = slice::from_raw_parts(kernel_file_buffer.buff, kernel_file_buffer.size);
+        let Some(kernel_elf) = Elf64::new(kernel_file_buff_u8_slice) else {
+            return Err("invalid elf file");
+        };
+
+        let Some(expand_info) = kernel_elf.expand_info() else {
+            return Err("failed to get kernel expand size");
+        };
+
+        Err("TODO!")
     }
 }
 

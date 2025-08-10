@@ -70,7 +70,10 @@ impl<'a> Elf64<'a> {
             match phdr.p_type {
                 Elf64Phdr::PT_NULL => (),
                 Elf64Phdr::PT_LOAD => {
-                    if phdr.p_memsz < phdr.p_filesz || (self.bin.len() as u64) < phdr.p_offset.checked_add(phdr.p_filesz).expect("overflow") {
+                    if phdr.p_memsz < phdr.p_filesz
+                        || (self.bin.len() as u64)
+                            < phdr.p_offset.checked_add(phdr.p_filesz).expect("overflow")
+                    {
                         return None;
                     }
 
@@ -87,7 +90,7 @@ impl<'a> Elf64<'a> {
                     if upper_addr < phdr.p_vaddr.checked_add(phdr.p_memsz).expect("overflow") {
                         upper_addr = phdr.p_vaddr + phdr.p_memsz;
                     }
-                },
+                }
                 _ => (),
             }
         }
@@ -123,7 +126,8 @@ impl<'a> Elf64<'a> {
             match phdr.p_type {
                 Elf64Phdr::PT_NULL => (),
                 Elf64Phdr::PT_LOAD => {
-                    let load_src: &[u8] = &self.bin[phdr.p_offset as usize ..(phdr.p_offset + phdr.p_filesz) as usize];
+                    let load_src: &[u8] =
+                        &self.bin[phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize];
                     buff[(phdr.p_vaddr - expand_base) as usize..].copy_from_slice(load_src);
                 }
                 _ => (),
