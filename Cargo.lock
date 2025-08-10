@@ -20,6 +20,9 @@ dependencies = [
 [[package]]
 name = "as-boot"
 version = "0.1.0"
+dependencies = [
+ "elf",
+]
 
 [[package]]
 name = "as-build"
@@ -90,6 +93,10 @@ name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
+
+[[package]]
+name = "elf"
+version = "0.1.0"
 
 [[package]]
 name = "fatfs"

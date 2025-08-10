@@ -1,6 +1,6 @@
 [workspace]
-members = ["as-build", "as-boot", "as-kernel"]
-default-members = ["as-build"]
+members = ["as-build", "as-boot", "as-kernel", "elf"]
+default-members = ["as-build", "elf"]
 resolver = "3"
 
 [profile.dev]

@@ -2,10 +2,15 @@
 #![no_std]
 
 use core::panic::PanicInfo;
+use core::arch::asm;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    loop {}
+    loop {
+        unsafe {
+            asm!("hlt");
+        }
+    }
 }
 
 #[panic_handler]

@@ -11,6 +11,7 @@ use efi::{
     EfiPhysicalAddress, EfiSimpleFileSystemProtocol, EfiSimpleTextOutputProtocol, EfiStatus,
     EfiSystemTable, UIntN,
 };
+use elf::Elf64;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "efiapi" fn efi_main(
