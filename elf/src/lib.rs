@@ -13,14 +13,18 @@ pub struct Elf64<'a> {
 }
 
 impl<'a> Elf64<'a> {
-    pub fn new(bin: &'a [u8]) -> Option<Self> {
+    pub fn new(bin: &'a [u8]) -> Result<Self, &'static str> {
         let elf64 = Self { bin: bin };
 
-        if elf64.is_valid() { Some(elf64) } else { None }
+        if elf64.is_valid() {
+            Ok(elf64)
+        } else {
+            Err("invalid elf64 file")
+        }
     }
 
     fn is_valid(&self) -> bool {
-        let Some(elf_header) = self.elf_header() else {
+        let Ok(elf_header) = self.elf_header() else {
             return false;
         };
 
@@ -30,38 +34,44 @@ impl<'a> Elf64<'a> {
             && elf_header.e_ident[3] == Elf64Ehdr::ELFMAG3
     }
 
-    pub fn elf_header(&self) -> Option<Elf64Ehdr> {
+    pub fn entry(&self) -> Result<u64, &'static str> {
+        Ok(self.elf_header()?.e_entry)
+    }
+
+    pub fn elf_header(&self) -> Result<Elf64Ehdr, &'static str> {
         if size_of::<Elf64Ehdr>() <= self.bin.len() {
             let header_ptr: *const u8 = self.bin.as_ptr();
             let mut elf_header: Elf64Ehdr = unsafe { mem::zeroed() };
             unsafe {
                 header_ptr.copy_to(&mut elf_header as *mut _ as *mut u8, size_of::<Elf64Ehdr>())
             };
-            Some(elf_header)
+            Ok(elf_header)
         } else {
-            None
+            Err("failed to get elf header")
         }
     }
 
-    pub fn program_headers(&self) -> Option<Elf64PhdrIter<'_>> {
+    pub fn program_headers(&self) -> Result<Elf64PhdrIter<'_>, &'static str> {
         let elf_header = self.elf_header()?;
 
         let phdr_offset = elf_header.e_phoff as usize;
         let phdr_entsize = elf_header.e_phentsize as usize;
         let phdr_num = elf_header.e_phnum as usize;
 
-        let elf64_phdrs: &[u8] = self
-            .bin
-            .get(phdr_offset..phdr_offset + phdr_entsize * phdr_num)?;
+        let elf64_phdrs = self.get(phdr_offset .. phdr_offset + phdr_entsize * phdr_num)?;
 
         Elf64PhdrIter::new(elf64_phdrs, phdr_num, phdr_entsize)
     }
 
-    pub fn get<I: SliceIndex<[u8]>>(&self, range: I) -> Option<&<I as SliceIndex<[u8]>>::Output> {
-        self.bin.get(range)
+    pub fn get<I: SliceIndex<[u8]>>(&self, range: I) -> Result<&<I as SliceIndex<[u8]>>::Output, &'static str> {
+        if let Some(slice) = self.bin.get(range) {
+            Ok(slice)
+        }else {
+            Err("out of range")
+        }
     }
 
-    pub fn expand_info(&self) -> Option<Elf64ExpandInfo> {
+    pub fn expand_info(&self) -> Result<Elf64ExpandInfo, &'static str> {
         let mut flag = true;
         let mut lower_addr = 0;
         let mut upper_addr = 0;
@@ -72,14 +82,14 @@ impl<'a> Elf64<'a> {
                 Elf64Phdr::PT_LOAD => {
                     if phdr.p_memsz < phdr.p_filesz
                         || (self.bin.len() as u64)
-                            < phdr.p_offset.checked_add(phdr.p_filesz).expect("overflow")
+                            < phdr.p_offset + phdr.p_filesz
                     {
-                        return None;
+                        return Err("program header is corrupted");
                     }
 
                     if flag {
                         lower_addr = phdr.p_vaddr;
-                        upper_addr = phdr.p_vaddr.checked_add(phdr.p_memsz).expect("overflow");
+                        upper_addr = phdr.p_vaddr + phdr.p_memsz;
                         flag = false;
                         continue;
                     }
@@ -87,7 +97,7 @@ impl<'a> Elf64<'a> {
                     if phdr.p_vaddr < lower_addr {
                         lower_addr = phdr.p_vaddr;
                     }
-                    if upper_addr < phdr.p_vaddr.checked_add(phdr.p_memsz).expect("overflow") {
+                    if upper_addr < phdr.p_vaddr + phdr.p_memsz {
                         upper_addr = phdr.p_vaddr + phdr.p_memsz;
                     }
                 }
@@ -97,19 +107,17 @@ impl<'a> Elf64<'a> {
 
         if !flag {
             assert!(lower_addr <= upper_addr);
-            Some(Elf64ExpandInfo {
+            Ok(Elf64ExpandInfo {
                 lower_addr: lower_addr,
                 upper_addr: upper_addr,
             })
         } else {
-            None
+            Err("no any program headers were found")
         }
     }
 
     pub fn expand(&self, buff: &mut [u8]) -> Result<(), &'static str> {
-        let Some(expand_info) = self.expand_info() else {
-            return Err("failed to get expand size");
-        };
+        let expand_info = self.expand_info()?;
         let expand_size = expand_info.upper_addr - expand_info.lower_addr;
 
         if (buff.len() as u64) < expand_size {
@@ -119,16 +127,18 @@ impl<'a> Elf64<'a> {
         buff.fill(0x00);
 
         let expand_base = expand_info.lower_addr;
-        let Some(program_headers) = self.program_headers() else {
-            return Err("failed to get program headers");
-        };
+        let program_headers = self.program_headers()?;
         for phdr in program_headers {
             match phdr.p_type {
                 Elf64Phdr::PT_NULL => (),
                 Elf64Phdr::PT_LOAD => {
+                    let file_offset = phdr.p_offset as usize;
+                    let file_offset_top = (phdr.p_offset + phdr.p_filesz) as usize;
                     let load_src: &[u8] =
-                        &self.bin[phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize];
-                    buff[(phdr.p_vaddr - expand_base) as usize..].copy_from_slice(load_src);
+                        &self.bin[file_offset .. file_offset_top];
+                    let dst_offset = (phdr.p_vaddr - expand_base) as usize;
+                    let dst_offset_top = (phdr.p_vaddr + phdr.p_filesz - expand_base) as usize;
+                    buff[dst_offset .. dst_offset_top].copy_from_slice(load_src);
                 }
                 _ => (),
             }
@@ -152,15 +162,15 @@ pub struct Elf64PhdrIter<'a> {
 }
 
 impl<'a> Elf64PhdrIter<'a> {
-    pub fn new(bin: &'a [u8], ph_num: usize, ph_entsize: usize) -> Option<Self> {
+    pub fn new(bin: &'a [u8], ph_num: usize, ph_entsize: usize) -> Result<Self, &'static str> {
         if ph_num * ph_entsize == bin.len() {
-            Some(Self {
+            Ok(Self {
                 bin: bin,
                 ph_num: ph_num,
                 ph_entsize: ph_entsize,
             })
         } else {
-            None
+            Err("invalid program headers found")
         }
     }
 }

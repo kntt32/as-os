@@ -578,3 +578,57 @@ impl EfiLoadedImageProtocol {
         [0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B],
     );
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EfiGraphicsOutputProtocol {
+    query_mode: unsafe extern "efiapi" fn(this: *const EfiGraphicsOutputProtocol, mode_number: UInt32, size_of_info: *mut UIntN, info: *mut *const EfiGraphicsOutputModeInformation) -> EfiStatus,
+    set_mode: unsafe extern "efiapi" fn(this: *const EfiGraphicsOutputProtocol, mode_number: UInt32) -> EfiStatus,
+    blt: usize,
+    mode: *const EfiGraphicsOutputProtocolMode,
+}
+
+impl EfiGraphicsOutputProtocol {
+    pub const GUID: EfiGuid = EfiGuid(0x9042a9de, 0x23dc, 0x4a38, [0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a]);
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EfiGraphicsOutputProtocolMode {
+    max_mode: UInt32,
+    mode: UInt32,
+    info: *const EfiGraphicsOutputModeInformation,
+    size_of_info: UIntN,
+    frame_buffer_base: EfiPhysicalAddress,
+    frame_buffer_size: UIntN
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EfiGraphicsOutputModeInformation {
+    version: UInt32,
+    horizontal_resolution: UInt32,
+    vertical_resolution: UInt32,
+    pixel_format: EfiGraphicsPixelFormat,
+    pixel_information: EfiPixelBitmask,
+    pixels_per_scanline: UInt32,
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, Debug)]
+pub enum EfiGraphicsPixelFormat {
+    PixelRedGreenBlueReserved8BitPerColor = 0,
+    PixelBlueGreenRedReserved8BitPerColor = 1,
+    PixelBitMask = 2,
+    PixelBltOnly = 3,
+    PixelFormatMax = 4,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EfiPixelBitmask {
+    red_mask: UInt32,
+    green_mask: UInt32,
+    blue_mask: UInt32,
+    reserved_mask: UInt32,
+}

@@ -1,5 +1,5 @@
 [workspace]
-members = ["as-build", "as-boot", "as-kernel", "elf"]
+members = ["as-build", "as-boot", "as-kernel", "elf", "bootgfx"]
 default-members = ["as-build", "elf"]
 resolver = "3"
 

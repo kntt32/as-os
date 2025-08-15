@@ -14,6 +14,8 @@ use core::panic::PanicInfo;
 use core::ptr;
 use core::slice;
 use static_str::*;
+use bootgfx::FrameBuffer;
+use bootgfx::FrameBufferMode;
 
 static mut SYSTEM_TABLE: *const EfiSystemTable = ptr::null();
 static mut BOOT_SERVICES: *const EfiBootServices = ptr::null();
@@ -165,6 +167,14 @@ impl PageBox {
         Self::new(alloc_pages)
     }
 
+    pub fn as_slice(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.page, self.pages * Self::PAGE_SIZE) }
+    }
+
+    pub fn as_slice_mut(&mut self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.page, self.pages * Self::PAGE_SIZE) }
+    }
+
     pub fn leak(self) -> &'static mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.page, self.pages * Self::PAGE_SIZE) }
     }
@@ -180,13 +190,13 @@ impl Deref for PageBox {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { slice::from_raw_parts(self.page, self.pages * Self::PAGE_SIZE) }
+        self.as_slice()
     }
 }
 
 impl DerefMut for PageBox {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { slice::from_raw_parts_mut(self.page, self.pages * Self::PAGE_SIZE) }
+        self.as_slice_mut()
     }
 }
 
@@ -318,3 +328,7 @@ impl File {
         }
     }
 }
+/*
+pub fn get_frame_buffer() -> Result<FrameBuffer, &'static str> {
+
+}*/
