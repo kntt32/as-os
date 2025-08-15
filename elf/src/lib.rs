@@ -58,15 +58,18 @@ impl<'a> Elf64<'a> {
         let phdr_entsize = elf_header.e_phentsize as usize;
         let phdr_num = elf_header.e_phnum as usize;
 
-        let elf64_phdrs = self.get(phdr_offset .. phdr_offset + phdr_entsize * phdr_num)?;
+        let elf64_phdrs = self.get(phdr_offset..phdr_offset + phdr_entsize * phdr_num)?;
 
         Elf64PhdrIter::new(elf64_phdrs, phdr_num, phdr_entsize)
     }
 
-    pub fn get<I: SliceIndex<[u8]>>(&self, range: I) -> Result<&<I as SliceIndex<[u8]>>::Output, &'static str> {
+    pub fn get<I: SliceIndex<[u8]>>(
+        &self,
+        range: I,
+    ) -> Result<&<I as SliceIndex<[u8]>>::Output, &'static str> {
         if let Some(slice) = self.bin.get(range) {
             Ok(slice)
-        }else {
+        } else {
             Err("out of range")
         }
     }
@@ -81,8 +84,7 @@ impl<'a> Elf64<'a> {
                 Elf64Phdr::PT_NULL => (),
                 Elf64Phdr::PT_LOAD => {
                     if phdr.p_memsz < phdr.p_filesz
-                        || (self.bin.len() as u64)
-                            < phdr.p_offset + phdr.p_filesz
+                        || (self.bin.len() as u64) < phdr.p_offset + phdr.p_filesz
                     {
                         return Err("program header is corrupted");
                     }
@@ -134,11 +136,10 @@ impl<'a> Elf64<'a> {
                 Elf64Phdr::PT_LOAD => {
                     let file_offset = phdr.p_offset as usize;
                     let file_offset_top = (phdr.p_offset + phdr.p_filesz) as usize;
-                    let load_src: &[u8] =
-                        &self.bin[file_offset .. file_offset_top];
+                    let load_src: &[u8] = &self.bin[file_offset..file_offset_top];
                     let dst_offset = (phdr.p_vaddr - expand_base) as usize;
                     let dst_offset_top = (phdr.p_vaddr + phdr.p_filesz - expand_base) as usize;
-                    buff[dst_offset .. dst_offset_top].copy_from_slice(load_src);
+                    buff[dst_offset..dst_offset_top].copy_from_slice(load_src);
                 }
                 _ => (),
             }

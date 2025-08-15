@@ -582,14 +582,27 @@ impl EfiLoadedImageProtocol {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EfiGraphicsOutputProtocol {
-    query_mode: unsafe extern "efiapi" fn(this: *const EfiGraphicsOutputProtocol, mode_number: UInt32, size_of_info: *mut UIntN, info: *mut *const EfiGraphicsOutputModeInformation) -> EfiStatus,
-    set_mode: unsafe extern "efiapi" fn(this: *const EfiGraphicsOutputProtocol, mode_number: UInt32) -> EfiStatus,
+    query_mode: unsafe extern "efiapi" fn(
+        this: *const EfiGraphicsOutputProtocol,
+        mode_number: UInt32,
+        size_of_info: *mut UIntN,
+        info: *mut *const EfiGraphicsOutputModeInformation,
+    ) -> EfiStatus,
+    set_mode: unsafe extern "efiapi" fn(
+        this: *const EfiGraphicsOutputProtocol,
+        mode_number: UInt32,
+    ) -> EfiStatus,
     blt: usize,
     mode: *const EfiGraphicsOutputProtocolMode,
 }
 
 impl EfiGraphicsOutputProtocol {
-    pub const GUID: EfiGuid = EfiGuid(0x9042a9de, 0x23dc, 0x4a38, [0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a]);
+    pub const GUID: EfiGuid = EfiGuid(
+        0x9042a9de,
+        0x23dc,
+        0x4a38,
+        [0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a],
+    );
 }
 
 #[repr(C)]
@@ -600,7 +613,7 @@ pub struct EfiGraphicsOutputProtocolMode {
     info: *const EfiGraphicsOutputModeInformation,
     size_of_info: UIntN,
     frame_buffer_base: EfiPhysicalAddress,
-    frame_buffer_size: UIntN
+    frame_buffer_size: UIntN,
 }
 
 #[repr(C)]

@@ -3,6 +3,8 @@ pub mod static_str;
 
 use super::*;
 
+use bootgfx::FrameBuffer;
+use bootgfx::FrameBufferMode;
 use core::ffi::c_void;
 use core::fmt;
 use core::fmt::Write;
@@ -14,8 +16,6 @@ use core::panic::PanicInfo;
 use core::ptr;
 use core::slice;
 use static_str::*;
-use bootgfx::FrameBuffer;
-use bootgfx::FrameBufferMode;
 
 static mut SYSTEM_TABLE: *const EfiSystemTable = ptr::null();
 static mut BOOT_SERVICES: *const EfiBootServices = ptr::null();
@@ -328,7 +328,42 @@ impl File {
         }
     }
 }
-/*
-pub fn get_frame_buffer() -> Result<FrameBuffer, &'static str> {
 
-}*/
+pub fn get_frame_buffer() -> Result<FrameBuffer, &'static str> {
+    check_boot_services_is_avaiable()?;
+    let locate_protocol = unsafe { (*BOOT_SERVICES).locate_protocol };
+
+    let efi_graphics_output_protocol_guid = EfiGraphicsOutputProtocol::GUID;
+    let mut efi_graphics_output_protocol: *const EfiGraphicsOutputProtocol = ptr::null();
+    if unsafe {
+        (locate_protocol)(
+            &raw const efi_graphics_output_protocol_guid,
+            ptr::null(),
+            &raw mut efi_graphics_output_protocol as *mut _,
+        )
+    } != EFI_STATUS_SUCCESS
+    {
+        return Err("failed to locate EfiGraphicsOutputProtocol");
+    }
+
+    let efi_graphics_output_protocol_mode = unsafe { *(*efi_graphics_output_protocol).mode };
+    let efi_graphics_output_mode_information = unsafe { *efi_graphics_output_protocol_mode.info };
+
+    let mode = match efi_graphics_output_mode_information.pixel_format {
+        EfiGraphicsPixelFormat::PixelRedGreenBlueReserved8BitPerColor => FrameBufferMode::RGB,
+        EfiGraphicsPixelFormat::PixelBlueGreenRedReserved8BitPerColor => FrameBufferMode::BGR,
+        _ => FrameBufferMode::Unknown,
+    };
+    let base_ptr = efi_graphics_output_protocol_mode.frame_buffer_base as usize as *mut u32;
+    let x_pixels = efi_graphics_output_mode_information.horizontal_resolution as usize;
+    let y_pixels = efi_graphics_output_mode_information.vertical_resolution as usize;
+    let scanline_pixels = efi_graphics_output_mode_information.pixels_per_scanline as usize;
+
+    Ok(FrameBuffer::new(
+        mode,
+        base_ptr,
+        x_pixels,
+        y_pixels,
+        scanline_pixels,
+    ))
+}
