@@ -19,7 +19,7 @@ impl<'a> Elf64<'a> {
         if elf64.is_valid() { Some(elf64) } else { None }
     }
 
-    pub fn is_valid(&self) -> bool {
+    fn is_valid(&self) -> bool {
         let Some(elf_header) = self.elf_header() else {
             return false;
         };

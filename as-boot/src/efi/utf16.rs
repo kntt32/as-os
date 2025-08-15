@@ -1,3 +1,4 @@
+#[allow(unused)]
 pub fn as_utf16<const L: usize>(s: &str) -> [u16; L] {
     let mut buff = [0u16; L];
     let mut buff_len: usize = 0;

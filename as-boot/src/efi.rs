@@ -1,3 +1,6 @@
+mod utf16;
+pub mod wrapper;
+
 use core::ffi::c_void;
 use core::mem;
 
@@ -23,6 +26,7 @@ pub type EfiLba = UInt64;
 pub type EfiTpl = UIntN;
 
 pub const EFI_STATUS_SUCCESS: EfiStatus = 0;
+pub const EFI_STATUS_ERROR: EfiStatus = EfiStatus::MAX;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -514,7 +518,7 @@ pub struct EfiFileInfo {
 
 impl EfiFileInfo {
     pub const GUID: EfiGuid = EfiGuid(
-        0x09576e93,
+        0x09576e92,
         0x6d3f,
         0x11d2,
         [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b],
