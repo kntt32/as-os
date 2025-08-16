@@ -5,8 +5,6 @@
 mod efi;
 
 use bootgfx::Color;
-use bootgfx::FrameBuffer;
-use bootgfx::FrameBufferMode;
 use efi::EFI_STATUS_SUCCESS;
 use efi::EfiHandle;
 use efi::EfiStatus;
@@ -27,7 +25,14 @@ pub fn main() -> Result<(), &'static str> {
     let mut frame_buffer = wrapper::get_frame_buffer()?;
     println!("FRAME_BUFFER: {:?}", frame_buffer);
 
-    frame_buffer.draw_rect(10, 10, 100, 100, Color::new(0xff, 0xff, 0xff));
+    frame_buffer.draw_rect(10, 30, 200, 100, Color::new(0x00, 0xff, 0xff));
+    frame_buffer.draw_str(
+        "Hello, World!!!!!",
+        0,
+        0,
+        Color::new(0x00, 0x00, 0xff),
+        Color::new(0x00, 0xff, 0x00),
+    );
 
     loop {}
 }
@@ -64,7 +69,7 @@ impl Kernel {
         let kernel_virtual_addr = expand_info.lower_addr as usize;
         let entry_point = elf64.entry()? as usize;
 
-        let mut kernel_buff_pagebox = PageBox::new_from_bytes(expand_size);
+        let kernel_buff_pagebox = PageBox::new_from_bytes(expand_size);
         let kernel_buff: &mut [u8] = kernel_buff_pagebox.leak();
         elf64.expand(kernel_buff)?;
         let kernel_buff_addr = kernel_buff.as_ptr().addr();

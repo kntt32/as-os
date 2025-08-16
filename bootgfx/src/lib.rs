@@ -1,6 +1,10 @@
 #![no_std]
+pub mod font;
 
+use core::ops::Index;
+use core::ops::IndexMut;
 use core::slice;
+use font::BitmapFont;
 
 #[derive(Clone, Copy, Debug)]
 pub struct FrameBuffer {
@@ -37,10 +41,6 @@ impl FrameBuffer {
         color: Color,
     ) {
         if self.mode == FrameBufferMode::RGB || self.mode == FrameBufferMode::BGR {
-            let frame_buffer_slice = unsafe {
-                slice::from_raw_parts_mut(self.base_ptr, self.scanline_pixels * self.y_pixels)
-            };
-
             if self.x_pixels <= x {
                 x = 0;
                 width = 0;
@@ -59,9 +59,106 @@ impl FrameBuffer {
             let color_raw = color.as_raw(self.mode);
             for i in y..y + height {
                 for k in x..x + width {
-                    frame_buffer_slice[i * self.scanline_pixels + k] = color_raw;
+                    self[(k, i)] = color_raw;
                 }
             }
+        }
+    }
+
+    pub fn draw_font(&mut self, ascii: u8, x: usize, y: usize, color: Color, background: Color) {
+        if x < self.x_pixels || y < self.y_pixels {
+            let font = BitmapFont::from(ascii);
+            let width = 8.min(self.x_pixels - x);
+            let height = 16.min(self.y_pixels - y);
+
+            let color_raw = color.as_raw(self.mode);
+            let background_raw = background.as_raw(self.mode);
+
+            for i in 0..height {
+                for k in 0..width {
+                    self[(x + k, y + i)] = if font.is_on(k, i) {
+                        color_raw
+                    } else {
+                        background_raw
+                    };
+                }
+            }
+        }
+    }
+
+    pub fn draw_str(&mut self, s: &str, x: usize, y: usize, color: Color, background: Color) {
+        let mut cursor_x = x;
+        for ascii in s.bytes() {
+            self.draw_font(ascii, cursor_x, y, color, background);
+            cursor_x += 8;
+        }
+    }
+
+    pub fn as_slice(&self) -> &[u32] {
+        unsafe { slice::from_raw_parts(self.base_ptr, self.scanline_pixels * self.y_pixels) }
+    }
+
+    pub fn as_slice_mut(&mut self) -> &mut [u32] {
+        unsafe { slice::from_raw_parts_mut(self.base_ptr, self.scanline_pixels * self.y_pixels) }
+    }
+
+    pub const fn width(&self) -> usize {
+        self.x_pixels
+    }
+
+    pub const fn height(&self) -> usize {
+        self.y_pixels
+    }
+}
+
+impl Index<(usize, usize)> for FrameBuffer {
+    type Output = u32;
+
+    fn index(&self, index: (usize, usize)) -> &u32 {
+        let (x, y) = index;
+        if self.x_pixels <= x || self.y_pixels <= y {
+            panic!("out of range");
+        }
+        unsafe { &*self.base_ptr.add(self.scanline_pixels * y + x) }
+    }
+}
+
+impl IndexMut<(usize, usize)> for FrameBuffer {
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut u32 {
+        let (x, y) = index;
+        if self.x_pixels <= x || self.y_pixels <= y {
+            panic!("out of range");
+        }
+        unsafe { &mut *self.base_ptr.add(self.scanline_pixels * y + x) }
+    }
+}
+
+impl Index<usize> for FrameBuffer {
+    type Output = [u32];
+
+    fn index(&self, index: usize) -> &[u32] {
+        if self.y_pixels <= index {
+            panic!("out of range");
+        }
+        unsafe {
+            slice::from_raw_parts(
+                self.base_ptr.add(self.scanline_pixels * index),
+                self.scanline_pixels,
+            )
+        }
+    }
+}
+
+impl IndexMut<usize> for FrameBuffer {
+    fn index_mut(&mut self, index: usize) -> &mut [u32] {
+        if self.y_pixels <= index {
+            panic!("out of range");
+        }
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.base_ptr.add(self.scanline_pixels * index),
+                self.scanline_pixels,
+            )
         }
     }
 }
