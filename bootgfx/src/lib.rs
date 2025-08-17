@@ -1,12 +1,13 @@
 #![no_std]
 pub mod font;
+pub mod terminal;
 
 use core::ops::Index;
 use core::ops::IndexMut;
 use core::slice;
 use font::BitmapFont;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct FrameBuffer {
     mode: FrameBufferMode,
     base_ptr: *mut u32,
@@ -178,7 +179,7 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn new(red: u8, green: u8, blue: u8) -> Self {
+    pub const fn new(red: u8, green: u8, blue: u8) -> Self {
         Self {
             red: red,
             green: green,

@@ -5,6 +5,7 @@
 mod efi;
 
 use bootgfx::Color;
+use bootgfx::terminal::Terminal;
 use efi::EFI_STATUS_SUCCESS;
 use efi::EfiHandle;
 use efi::EfiStatus;
@@ -33,7 +34,12 @@ pub fn main() -> Result<(), &'static str> {
         Color::new(0x00, 0x00, 0xff),
         Color::new(0x00, 0xff, 0x00),
     );
-
+    let mut terminal = Terminal::new(frame_buffer);
+    for _ in 0..500 {
+        terminal.write("Hello, Terminal!");
+    }
+    terminal.clean();
+    terminal.write("Hello, as-boot!\n");
     loop {}
 }
 
