@@ -1,8 +1,8 @@
-mod utf16;
-pub mod wrapper;
+#![no_std]
+
+pub mod utf16;
 
 use core::ffi::c_void;
-use core::mem;
 
 pub type Boolean = bool;
 pub type IntN = isize;
@@ -45,26 +45,26 @@ pub struct EfiTableHeader {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EfiSystemTable {
-    hdr: EfiTableHeader,
-    firmware_vendor: *const Char16,
-    firmware_revision: UInt32,
-    console_in_handle: EfiHandle,
+    pub hdr: EfiTableHeader,
+    pub firmware_vendor: *const Char16,
+    pub firmware_revision: UInt32,
+    pub console_in_handle: EfiHandle,
     pub con_in: *const EfiSimpleTextInputProtocol,
-    console_out_handle: EfiHandle,
+    pub console_out_handle: EfiHandle,
     pub con_out: *const EfiSimpleTextOutputProtocol,
     standard_error_handle: EfiHandle,
     pub std_err: *const EfiSimpleTextOutputProtocol,
     pub runtime_services: *const EfiRuntimeServices,
     pub boot_services: *const EfiBootServices,
-    number_of_table_entries: UIntN,
-    configuration_table: *const EfiConfigurationTable,
+    pub number_of_table_entries: UIntN,
+    pub configuration_table: *const EfiConfigurationTable,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EfiConfigurationTable {
-    vendor_guid: EfiGuid,
-    vendor_table: *const c_void,
+    pub vendor_guid: EfiGuid,
+    pub vendor_table: *const c_void,
 }
 
 #[repr(C)]
@@ -104,7 +104,7 @@ pub struct EfiSimpleTextOutputProtocol {
         this: *const EfiSimpleTextOutputProtocol,
         extended_verification: Boolean,
     ) -> EfiStatus,
-    output_string: unsafe extern "efiapi" fn(
+    pub output_string: unsafe extern "efiapi" fn(
         this: *const EfiSimpleTextOutputProtocol,
         string: *const Char16,
     ) -> EfiStatus,
@@ -126,7 +126,8 @@ pub struct EfiSimpleTextOutputProtocol {
         this: *const EfiSimpleTextOutputProtocol,
         attribute: UIntN,
     ) -> EfiStatus,
-    clear_screen: unsafe extern "efiapi" fn(this: *const EfiSimpleTextOutputProtocol) -> EfiStatus,
+    pub clear_screen:
+        unsafe extern "efiapi" fn(this: *const EfiSimpleTextOutputProtocol) -> EfiStatus,
     set_cursor_position: unsafe extern "efiapi" fn(
         this: *const EfiSimpleTextOutputProtocol,
         column: UIntN,
@@ -582,18 +583,18 @@ impl EfiLoadedImageProtocol {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EfiGraphicsOutputProtocol {
-    query_mode: unsafe extern "efiapi" fn(
+    pub query_mode: unsafe extern "efiapi" fn(
         this: *const EfiGraphicsOutputProtocol,
         mode_number: UInt32,
         size_of_info: *mut UIntN,
         info: *mut *const EfiGraphicsOutputModeInformation,
     ) -> EfiStatus,
-    set_mode: unsafe extern "efiapi" fn(
+    pub set_mode: unsafe extern "efiapi" fn(
         this: *const EfiGraphicsOutputProtocol,
         mode_number: UInt32,
     ) -> EfiStatus,
-    blt: usize,
-    mode: *const EfiGraphicsOutputProtocolMode,
+    pub blt: usize,
+    pub mode: *const EfiGraphicsOutputProtocolMode,
 }
 
 impl EfiGraphicsOutputProtocol {
@@ -608,23 +609,23 @@ impl EfiGraphicsOutputProtocol {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EfiGraphicsOutputProtocolMode {
-    max_mode: UInt32,
-    mode: UInt32,
-    info: *const EfiGraphicsOutputModeInformation,
-    size_of_info: UIntN,
-    frame_buffer_base: EfiPhysicalAddress,
-    frame_buffer_size: UIntN,
+    pub max_mode: UInt32,
+    pub mode: UInt32,
+    pub info: *const EfiGraphicsOutputModeInformation,
+    pub size_of_info: UIntN,
+    pub frame_buffer_base: EfiPhysicalAddress,
+    pub frame_buffer_size: UIntN,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct EfiGraphicsOutputModeInformation {
-    version: UInt32,
-    horizontal_resolution: UInt32,
-    vertical_resolution: UInt32,
-    pixel_format: EfiGraphicsPixelFormat,
-    pixel_information: EfiPixelBitmask,
-    pixels_per_scanline: UInt32,
+    pub version: UInt32,
+    pub horizontal_resolution: UInt32,
+    pub vertical_resolution: UInt32,
+    pub pixel_format: EfiGraphicsPixelFormat,
+    pub pixel_information: EfiPixelBitmask,
+    pub pixels_per_scanline: UInt32,
 }
 
 #[repr(u32)]

@@ -1,4 +1,6 @@
 use super::*;
+use core::fmt;
+use core::fmt::Write;
 use core::ops::Deref;
 use core::ops::DerefMut;
 
@@ -23,18 +25,20 @@ impl Terminal {
         let width = frame_buffer.width() / 8;
         let height = frame_buffer.height() / 16;
 
-        Self {
+        let mut terminal = Self {
             frame_buffer: frame_buffer,
             cursor_x: 0,
             cursor_y: 0,
             width: width,
             height: height,
             buffer: [0u8; Self::BUFF_WIDTH_MAX * Self::BUFF_HEIGHT_MAX],
-        }
+        };
+        terminal.flush();
+        terminal
     }
 
     pub fn clean(&mut self) {
-        self.buffer[.. self.width * self.height].fill(0);
+        self.buffer[..self.width * self.height].fill(0);
         self.cursor_x = 0;
         self.cursor_y = 0;
 
@@ -48,18 +52,18 @@ impl Terminal {
             b'\n' => self.new_line(),
             b'\r' => self.cursor_x = 0,
             _ => {
-        self.buffer[self.cursor_x + self.cursor_y * self.width] = ascii;
-        self.frame_buffer.draw_font(
-            ascii,
-            self.cursor_x * 8,
-            self.cursor_y * 16,
-            Self::FOREGROUND,
-            Self::BACKGROUND,
-        );
-        self.seek_cursor();
-            },
+                self.buffer[self.cursor_x + self.cursor_y * self.width] = ascii;
+                self.frame_buffer.draw_font(
+                    ascii,
+                    self.cursor_x * 8,
+                    self.cursor_y * 16,
+                    Self::FOREGROUND,
+                    Self::BACKGROUND,
+                );
+                self.seek_cursor();
+            }
         }
-        
+
         self.draw_cursor();
     }
 
@@ -154,5 +158,15 @@ impl Deref for Terminal {
 impl DerefMut for Terminal {
     fn deref_mut(&mut self) -> &mut FrameBuffer {
         &mut self.frame_buffer
+    }
+}
+
+impl Write for Terminal {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for byte in s.bytes() {
+            self.write_ascii(byte);
+        }
+
+        Ok(())
     }
 }

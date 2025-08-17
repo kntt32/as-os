@@ -1,10 +1,10 @@
-#[macro_use]
 pub mod static_str;
 
-use super::*;
+use efi::*;
 
 use bootgfx::FrameBuffer;
 use bootgfx::FrameBufferMode;
+use bootgfx::terminal::Terminal;
 use core::ffi::c_void;
 use core::fmt;
 use core::fmt::Write;
@@ -15,27 +15,81 @@ use core::ops::DerefMut;
 use core::panic::PanicInfo;
 use core::ptr;
 use core::slice;
-use static_str::*;
 
 static mut SYSTEM_TABLE: *const EfiSystemTable = ptr::null();
 static mut BOOT_SERVICES: *const EfiBootServices = ptr::null();
+static mut TERMINAL: Option<Terminal> = None;
+
+pub fn take_terminal() -> Option<Terminal> {
+    unsafe {
+        let terminal = &raw mut TERMINAL;
+        (*terminal).take()
+    }
+}
+
+pub fn set_terminal(terminal: Terminal) {
+    unsafe {
+        TERMINAL = Some(terminal);
+    }
+}
+
+pub fn write_terminal(s: &str) {
+    if let Some(terminal) = unsafe { &mut *(&raw mut TERMINAL) } {
+        terminal.write(s);
+    }
+}
+
+#[macro_export]
+macro_rules! println {
+    ($($arg:tt)*) => {{
+        use crate::efi_wrapper::write_terminal;
+        use core::fmt::Write;
+        let mut buff = crate::efi_wrapper::static_str::StaticStr::<1024>::new();
+        write!(&mut buff, $($arg)*).unwrap();
+        write!(&mut buff, "\n\r").unwrap();
+
+        write_terminal(&*buff);
+    }};
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => {{
+        use crate::efi_wrapper::write_terminal;
+        use core::fmt::Write;
+        let mut buff = crate::efi_wrapper::static_str::StaticStr::<1024>::new();
+        write!(&mut buff, $($arg)*).unwrap();
+
+        write_terminal(&*buff);
+    }};
+}
+
+#[macro_export]
+macro_rules! format {
+    ($($arg:tt)*) => {{
+        use core::fmt::Write;
+        let mut buff = crate::efi_wrapper::static_str::StaticStr::<1024>::new();
+        write!(&mut buff, $($arg)*).unwrap();
+        buff
+    }}
+}
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     if check_boot_services_is_avaiable().is_ok() {
         if let Some(location) = info.location() {
-            println!(
-                "paniced at {}:{}:{}",
+            print!(
+                "paniced at {}:{}:{}: ",
                 location.file(),
                 location.line(),
                 location.column()
             );
         } else {
-            println!("paniced");
+            print!("paniced: ");
         }
 
         if let Some(s) = info.message().as_str() {
-            stdout(s);
+            println!("{}", s);
         }
     }
     loop {}
@@ -55,53 +109,6 @@ fn check_boot_services_is_avaiable() -> Result<(), &'static str> {
         Err("unexpected call of stdout")
     } else {
         Ok(())
-    }
-}
-
-pub fn stdout(string: &str) -> Result<(), &'static str> {
-    check_boot_services_is_avaiable()?;
-
-    let con_out = unsafe { (&*SYSTEM_TABLE).con_out };
-    let output_string = unsafe { (&*con_out).output_string };
-
-    let mut string_encode_utf16 = string.encode_utf16();
-    loop {
-        let mut string_utf16_buff = [0u16; 1024];
-        let mut string_utf16_len: usize = 0;
-
-        while string_utf16_len < string_utf16_buff.len() - 1 {
-            let Some(utf16_code) = string_encode_utf16.next() else {
-                break;
-            };
-
-            string_utf16_buff[string_utf16_len] = utf16_code;
-            string_utf16_len += 1;
-        }
-        string_utf16_buff[string_utf16_buff.len() - 1] = 0;
-
-        if string_utf16_len == 0 {
-            break Ok(());
-        }
-
-        let status = unsafe { (output_string)(con_out, &raw const string_utf16_buff as *const _) };
-        if status != EFI_STATUS_SUCCESS {
-            panic!("failed to output string");
-        }
-    }
-}
-
-pub fn stdclean() -> Result<(), &'static str> {
-    check_boot_services_is_avaiable()?;
-
-    unsafe {
-        let con_out = (&*SYSTEM_TABLE).con_out;
-        let clear_screen = (&*con_out).clear_screen;
-
-        if (clear_screen)(con_out) == EFI_STATUS_SUCCESS {
-            Ok(())
-        } else {
-            Err("failed to clear screen")
-        }
     }
 }
 
@@ -281,7 +288,7 @@ impl File {
         let read = unsafe { (&*self.protocol).read };
 
         let mut buffer_size: UIntN = buf.len();
-        let mut buffer: *mut u8 = buf as *mut _ as *mut u8;
+        let buffer: *mut u8 = buf as *mut _ as *mut u8;
         if unsafe { (read)(self.protocol, &raw mut buffer_size, buffer) } != EFI_STATUS_SUCCESS {
             return Err("failed to read to buffer");
         }

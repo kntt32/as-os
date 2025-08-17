@@ -44,6 +44,7 @@ impl<const C: usize> StaticStr<C> {
         }
     }
 
+    #[allow(unused)]
     pub fn from(s: &str) -> Self {
         let mut static_str = Self::new();
 
@@ -57,35 +58,4 @@ impl<const C: usize> StaticStr<C> {
 
         static_str
     }
-}
-
-#[macro_export]
-macro_rules! println {
-    ($($arg:tt)*) => {{
-        use core::fmt::Write;
-        let mut buff = crate::efi::wrapper::static_str::StaticStr::<1024>::new();
-        write!(&mut buff, $($arg)*).unwrap();
-        write!(&mut buff, "\n\r").unwrap();
-        let _ = crate::wrapper::stdout(&*buff);
-    }};
-}
-
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {{
-        use core::fmt::Write;
-        let mut buff = crate::efi::wrapper::static_str::StaticStr::<1024>::new();
-        write!(&mut buff, $($arg)*).unwrap();
-        let _ = crate::wrapper::stdout(&*buff);
-    }};
-}
-
-#[macro_export]
-macro_rules! format {
-    ($($arg:tt)*) => {{
-        use core::fmt::Write;
-        let mut buff = crate::efi::wrapper::static_str::StaticStr::<1024>::new();
-        write!(&mut buff, $($arg)*).unwrap();
-        buff
-    }}
 }

@@ -1,8 +1,8 @@
 #![no_main]
 #![no_std]
 
-#[allow(unused)]
-mod efi;
+#[macro_use]
+mod efi_wrapper;
 
 use bootgfx::Color;
 use bootgfx::terminal::Terminal;
@@ -10,11 +10,10 @@ use efi::EFI_STATUS_SUCCESS;
 use efi::EfiHandle;
 use efi::EfiStatus;
 use efi::EfiSystemTable;
-use efi::wrapper;
+use efi_wrapper::File;
+use efi_wrapper::PageBox;
+use efi_wrapper::set_terminal;
 use elf::Elf64;
-use wrapper::File;
-use wrapper::PageBox;
-use wrapper::stdclean;
 
 pub fn main() -> Result<(), &'static str> {
     println!("Hello, World!");
@@ -23,23 +22,8 @@ pub fn main() -> Result<(), &'static str> {
     let kernel = Kernel::new("kernel.elf")?;
     println!("KERNEL: {:?}", kernel);
 
-    let mut frame_buffer = wrapper::get_frame_buffer()?;
-    println!("FRAME_BUFFER: {:?}", frame_buffer);
+    println!("Hello, TERMINAL!");
 
-    frame_buffer.draw_rect(10, 30, 200, 100, Color::new(0x00, 0xff, 0xff));
-    frame_buffer.draw_str(
-        "Hello, World!!!!!",
-        0,
-        0,
-        Color::new(0x00, 0x00, 0xff),
-        Color::new(0x00, 0xff, 0x00),
-    );
-    let mut terminal = Terminal::new(frame_buffer);
-    for _ in 0..500 {
-        terminal.write("Hello, Terminal!");
-    }
-    terminal.clean();
-    terminal.write("Hello, as-boot!\n");
     loop {}
 }
 
@@ -94,10 +78,11 @@ pub unsafe extern "efiapi" fn efi_main(
     system_table: *const EfiSystemTable,
 ) -> EfiStatus {
     unsafe {
-        wrapper::init(system_table);
+        efi_wrapper::init(system_table);
     }
-
-    stdclean().expect("failed to clear screen");
+    let frame_buffer = efi_wrapper::get_frame_buffer().expect("failed to get frame buffer");
+    let terminal = Terminal::new(frame_buffer);
+    set_terminal(terminal);
 
     if let Err(msg) = main() {
         panic!("ERROR: {}", msg);
