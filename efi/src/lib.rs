@@ -319,7 +319,7 @@ pub struct EfiBootServices {
     start_image: *const c_void,
     exit: *const c_void,
     unload_image: *const c_void,
-    exit_boot_services:
+    pub exit_boot_services:
         unsafe extern "efiapi" fn(image_handle: EfiHandle, map_key: UIntN) -> EfiStatus,
 
     get_next_monotonic_count: *const c_void,

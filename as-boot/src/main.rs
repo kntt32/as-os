@@ -11,6 +11,7 @@ use efi::EfiHandle;
 use efi::EfiStatus;
 use efi::EfiSystemTable;
 use efi_wrapper::File;
+use efi_wrapper::MemoryMap;
 use efi_wrapper::PageBox;
 use efi_wrapper::set_terminal;
 use elf::Elf64;
@@ -23,6 +24,9 @@ pub fn main() -> Result<(), &'static str> {
     println!("KERNEL: {:?}", kernel);
 
     println!("Hello, TERMINAL!");
+
+    let memory_map = unsafe { efi_wrapper::exit_boot_services() };
+    println!("Hello, Freedom!");
 
     loop {}
 }
@@ -74,11 +78,11 @@ impl Kernel {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "efiapi" fn efi_main(
-    _image_handle: EfiHandle,
+    image_handle: EfiHandle,
     system_table: *const EfiSystemTable,
 ) -> EfiStatus {
     unsafe {
-        efi_wrapper::init(system_table);
+        efi_wrapper::init(image_handle, system_table);
     }
     let frame_buffer = efi_wrapper::get_frame_buffer().expect("failed to get frame buffer");
     let terminal = Terminal::new(frame_buffer);

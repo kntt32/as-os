@@ -18,6 +18,7 @@ use core::slice;
 
 static mut SYSTEM_TABLE: *const EfiSystemTable = ptr::null();
 static mut BOOT_SERVICES: *const EfiBootServices = ptr::null();
+static mut IMAGE_HANDLE: Option<EfiHandle> = None;
 static mut TERMINAL: Option<Terminal> = None;
 
 pub fn take_terminal() -> Option<Terminal> {
@@ -95,8 +96,9 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
-pub unsafe fn init(system_table: *const EfiSystemTable) {
+pub unsafe fn init(image_handle: EfiHandle, system_table: *const EfiSystemTable) {
     unsafe {
+        IMAGE_HANDLE = Some(image_handle);
         SYSTEM_TABLE = system_table;
         if SYSTEM_TABLE != ptr::null() {
             BOOT_SERVICES = (&*system_table).boot_services;
@@ -182,6 +184,14 @@ impl PageBox {
         unsafe { slice::from_raw_parts_mut(self.page, self.pages * Self::PAGE_SIZE) }
     }
 
+    pub fn as_ptr(&self) -> *const u8 {
+        self.page
+    }
+
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.page
+    }
+
     pub fn leak(self) -> &'static mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.page, self.pages * Self::PAGE_SIZE) }
     }
@@ -207,7 +217,7 @@ impl DerefMut for PageBox {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct File {
     protocol: *const EfiFileProtocol,
 }
@@ -373,4 +383,90 @@ pub fn get_frame_buffer() -> Result<FrameBuffer, &'static str> {
         y_pixels,
         scanline_pixels,
     ))
+}
+
+#[derive(Debug)]
+pub struct MemoryMap {
+    page_box: PageBox,
+    entry_size: usize,
+    entry_count: usize,
+    map_key: usize,
+}
+
+impl MemoryMap {
+    pub fn map_key(&self) -> usize {
+        self.map_key
+    }
+
+    pub fn get_memory_map() -> Self {
+        check_boot_services_is_avaiable().expect("use after exit_boot_services");
+        let get_memory_map = unsafe { (*BOOT_SERVICES).get_memory_map };
+
+        let mut count = 0;
+        const MAX_COUNT: i32 = 10;
+        loop {
+            let mut memory_map_size: UIntN = 0;
+            let mut map_key: UIntN = 0;
+            let mut descriptor_size: UIntN = 0;
+            let mut descriptor_version: UInt32 = 0;
+
+            unsafe {
+                (get_memory_map)(
+                    &raw mut memory_map_size,
+                    ptr::null_mut() as *mut _,
+                    &raw mut map_key,
+                    &raw mut descriptor_size,
+                    &raw mut descriptor_version,
+                );
+            }
+            memory_map_size += descriptor_size;
+
+            let mut page_box =
+                PageBox::new((memory_map_size + PageBox::PAGE_SIZE - 1) / PageBox::PAGE_SIZE);
+            if unsafe {
+                (get_memory_map)(
+                    &raw mut memory_map_size,
+                    page_box.as_mut_ptr() as *mut _,
+                    &raw mut map_key,
+                    &raw mut descriptor_size,
+                    &raw mut descriptor_version,
+                )
+            } == EFI_STATUS_SUCCESS
+            {
+                break Self {
+                    page_box: page_box,
+                    entry_size: descriptor_size,
+                    entry_count: memory_map_size / descriptor_size,
+                    map_key: map_key,
+                };
+            }
+
+            count += 1;
+
+            if MAX_COUNT == count {
+                panic!("failed to  get memory map");
+            }
+        }
+    }
+}
+
+pub unsafe fn exit_boot_services() -> MemoryMap {
+    const MAX_COUNT: i32 = 10;
+    let mut count = 0;
+
+    let exit_boot_services = unsafe { (*BOOT_SERVICES).exit_boot_services };
+    let image_handle = unsafe { IMAGE_HANDLE.expect("failed to get image handle") };
+    loop {
+        let memory_map = MemoryMap::get_memory_map();
+
+        if unsafe { (exit_boot_services)(image_handle, memory_map.map_key()) } == EFI_STATUS_SUCCESS
+        {
+            break memory_map;
+        }
+
+        count += 1;
+        if count == MAX_COUNT {
+            panic!("failed to exit boot services");
+        }
+    }
 }
